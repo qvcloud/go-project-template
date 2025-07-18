@@ -1,1 +1,1 @@
-# go-project-template
+# github.com/qvcloud/go-project-template
