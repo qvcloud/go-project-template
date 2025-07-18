@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/qvcloud/go-project-template/internal/services/pkg/response"
+	"github.com/qvcloud/go-project-template/pkg/response"
 )
 
 func TestResponseSuccess(t *testing.T) {
