@@ -24,6 +24,13 @@ func NewViper(logger *zap.Logger) *viper.Viper {
 		v.AddConfigPath(root)
 	}
 
+	v.AddConfigPath(".")
+	v.SetConfigName("config")
+	v.SetConfigType("toml")
+	if err := v.ReadInConfig(); err != nil {
+		logger.Sugar().Warnf("not found config")
+	}
+
 	logger.Sugar().Infof("config file: %s", v.ConfigFileUsed())
 	return v
 }
