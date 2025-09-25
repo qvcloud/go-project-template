@@ -17,7 +17,7 @@ func NewGorm(v *viper.Viper) *gorm.DB {
 	v.SetDefault("database.port", 5432)
 	v.SetDefault("database.user", "postgres")
 	v.SetDefault("database.password", "postgres")
-	v.SetDefault("database.name", "jifenhelper")
+	v.SetDefault("database.name", "dev")
 	v.SetDefault("database.timezone", "Asia/Shanghai")
 	v.SetDefault("database.debug", false)
 
