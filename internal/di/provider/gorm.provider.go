@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func NewGorm(v *viper.Viper) *gorm.DB {
+func NewGorm(v *viper.Viper) (*gorm.DB, error) {
 	v.SetDefault("database.host", "localhost")
 	v.SetDefault("database.port", 5432)
 	v.SetDefault("database.user", "postgres")
@@ -47,12 +47,12 @@ func NewGorm(v *viper.Viper) *gorm.DB {
 		Logger: newLogger,
 	})
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("failed to open gorm db: %w", err)
 	}
 
 	if debug {
 		db = db.Debug()
 	}
 
-	return db
+	return db, nil
 }

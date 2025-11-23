@@ -1,6 +1,8 @@
 package database
 
 import (
+	"fmt"
+
 	"github.com/qvcloud/go-project-template/internal/persistence/database/entities"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
@@ -18,12 +20,42 @@ var Module = fx.Module(
 )
 
 func autoMigrate(db *gorm.DB, logger *zap.Logger) error {
-	err := db.AutoMigrate(
+	migrator := db.Migrator()
+
+	models := []interface{}{
 		&entities.User{},
-	)
-	if err != nil {
-		logger.Error("auto migrate error", zap.Error(err))
-		return err
+		//在这里添加其他的实体模型
 	}
+
+	for _, model := range models {
+		// If table does not exist, create it (safe)
+		if !migrator.HasTable(model) {
+			if err := migrator.CreateTable(model); err != nil {
+				logger.Error("create table failed", zap.Error(err))
+				return fmt.Errorf("create table failed: %w", err)
+			}
+			logger.Info("created table for model", zap.Any("model", fmt.Sprintf("%T", model)))
+			continue
+		}
+
+		// Table exists: only add missing columns, do not alter or drop existing ones.
+		stmt := &gorm.Statement{DB: db}
+		if err := stmt.Parse(model); err != nil {
+			logger.Error("parse model schema failed", zap.Error(err))
+			return fmt.Errorf("parse model schema failed: %w", err)
+		}
+
+		for _, field := range stmt.Schema.Fields {
+			// field.DBName is the actual column name in DB; AddColumn expects the struct field name
+			if !migrator.HasColumn(model, field.DBName) {
+				if err := migrator.AddColumn(model, field.Name); err != nil {
+					logger.Error("add column failed", zap.String("column", field.DBName), zap.Error(err))
+					return fmt.Errorf("add column %s failed: %w", field.DBName, err)
+				}
+				logger.Info("added missing column", zap.String("column", field.DBName))
+			}
+		}
+	}
+
 	return nil
 }

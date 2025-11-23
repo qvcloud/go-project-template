@@ -3,13 +3,14 @@ package provider
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
-func NewRedis(v *viper.Viper, logger *zap.Logger) *redis.Client {
+func NewRedis(v *viper.Viper, logger *zap.Logger) (*redis.Client, error) {
 	v.SetDefault("redis.address", "localhost:6379")
 	v.SetDefault("redis.db", 0)
 	v.SetDefault("redis.username", "")
@@ -37,9 +38,9 @@ func NewRedis(v *viper.Viper, logger *zap.Logger) *redis.Client {
 	client := redis.NewClient(&opts)
 	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
-		logger.Sugar().Fatalf("failed to connect to redis: %v, addr: %s db: %d", err, address, db)
+		return nil, fmt.Errorf("failed to connect to redis (%s db=%d): %w", address, db, err)
 	}
 	logger.Info("connected to redis", zap.String("addr", address), zap.Int("db", db))
-	return client
+	return client, nil
 
 }

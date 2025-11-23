@@ -23,4 +23,4 @@ FLAGS="-s -w -X ${UTILS}.Version=${TAG} -X ${UTILS}.Commit=${COMMIT} -X ${UTILS}
 
 echo ${FLAGS}
 
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="${FLAGS}" -o ./dist/xxName cmd/main.go 
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="${FLAGS}" -o ./dist/go-project-template cmd/main.go

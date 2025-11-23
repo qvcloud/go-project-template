@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	appName      = "xxName"
-	appDesc      = ""
-	appAuthor    = "yzimhao"
+	appName      = "go-project-template"
+	appDesc      = "A starter template for Go web services"
+	appAuthor    = "qvcloud"
 	appCopyright = "https://github.com/qvcloud/go-project-template"
 )
 
