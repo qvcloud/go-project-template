@@ -1,3 +1,7 @@
+environment: development # Environment: development, production, testing
+
+timezone: "Asia/Shanghai"
+
 # Database Configuration
 database:
   host: "localhost"
@@ -5,7 +9,6 @@ database:
   user: "postgres"
   password: "password"
   name: "dev"
-  timezone: "Asia/Shanghai"
   debug: false
 
 # Redis Configuration

@@ -6,31 +6,15 @@ import (
 	"os"
 	"time"
 
-	"github.com/spf13/viper"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
-func NewGorm(v *viper.Viper) (*gorm.DB, error) {
-	v.SetDefault("database.host", "localhost")
-	v.SetDefault("database.port", 5432)
-	v.SetDefault("database.user", "postgres")
-	v.SetDefault("database.password", "postgres")
-	v.SetDefault("database.name", "dev")
-	v.SetDefault("database.timezone", "Asia/Shanghai")
-	v.SetDefault("database.debug", false)
-
-	user := v.GetString("database.user")
-	password := v.GetString("database.password")
-	host := v.GetString("database.host")
-	port := v.GetInt("database.port")
-	dbname := v.GetString("database.name")
-	timezone := v.GetString("database.timezone")
-	debug := v.GetBool("database.debug")
+func NewGorm(cfg *Config) (*gorm.DB, error) {
 
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable TimeZone=%s",
-		host, port, user, password, dbname, timezone)
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.Timezone)
 
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
@@ -50,7 +34,7 @@ func NewGorm(v *viper.Viper) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to open gorm db: %w", err)
 	}
 
-	if debug {
+	if cfg.Database.Debug {
 		db = db.Debug()
 	}
 

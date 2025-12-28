@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func NewConfig(pathStr string) *viper.Viper {
+func NewViper(pathStr string) *viper.Viper {
 	var v = viper.NewWithOptions(
 		viper.EnvKeyReplacer(strings.NewReplacer(".", "_")),
 	)

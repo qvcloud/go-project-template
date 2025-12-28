@@ -54,7 +54,7 @@ func main() {
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			configPath := cmd.String("config")
-			v := provider.NewConfig(configPath)
+			v := provider.NewViper(configPath)
 			app := di.App(v)
 			app.Run()
 			return nil

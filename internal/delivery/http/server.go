@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/qvcloud/go-project-template/internal/delivery/http/handler/user"
-	"github.com/spf13/viper"
+	"github.com/qvcloud/go-project-template/internal/di/provider"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
@@ -13,7 +13,7 @@ import (
 type Server struct {
 	engine *gin.Engine
 	logger *zap.Logger
-	viper  *viper.Viper
+	cfg    *provider.Config
 	//middleware
 	//controllers
 	userHandler *user.Handler
@@ -22,15 +22,15 @@ type Server struct {
 type injectContext struct {
 	fx.In
 	Logger      *zap.Logger
-	Viper       *viper.Viper
 	Engine      *gin.Engine
 	UserHandler *user.Handler
+	Cfg         *provider.Config
 }
 
 func NewHTTPServer(in injectContext) *Server {
 	r := &Server{
 		logger:      in.Logger,
-		viper:       in.Viper,
+		cfg:         in.Cfg,
 		engine:      in.Engine,
 		userHandler: in.UserHandler,
 		//各种controller注入进来
@@ -43,10 +43,8 @@ func (w *Server) Run() {
 
 	w.initRoutes()
 
-	w.viper.SetDefault("listen", "127.0.0.1")
-	w.viper.SetDefault("port", 8080)
 	go func() {
-		if err := w.engine.Run(fmt.Sprintf("%s:%d", w.viper.GetString("listen"), w.viper.GetInt("port"))); err != nil {
+		if err := w.engine.Run(fmt.Sprintf("%s:%d", w.cfg.HTTP.Address, w.cfg.HTTP.Port)); err != nil {
 			w.logger.Error("failed to start server", zap.Error(err))
 		}
 	}()

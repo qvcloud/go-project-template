@@ -17,6 +17,7 @@ func App(v *viper.Viper) *fx.App {
 		fx.Supply(v),
 		fx.Provide(
 			zap.NewDevelopment,
+			provider.NewConfig,
 			provider.NewRedis,
 			provider.NewGin,
 			service.NewUserService,
