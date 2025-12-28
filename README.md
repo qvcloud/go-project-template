@@ -12,6 +12,8 @@
 - **日志**: 使用 [Zap](https://github.com/uber-go/zap) 进行结构化日志记录。
 - **缓存**: 集成 [go-redis](https://github.com/redis/go-redis)。
 - **API 文档**: 集成 Swagger 自动生成文档。
+- **构建工具**: 完善的 Makefile 支持，包括构建、测试、镜像打包等。
+- **容器化**: 提供 Dockerfile 支持多阶段构建。
 
 ## 项目结构
 
@@ -82,14 +84,41 @@ listen:
 - `redis.address` -> `APP_REDIS_ADDRESS`
 - `listen.port` -> `APP_LISTEN_PORT`
 
+### Docker 构建
+
+项目支持构建 Docker 镜像，并允许自定义应用名称和版本：
+
+```bash
+# 构建默认镜像 (go-project-template:latest)
+make image
+
+# 构建指定名称和版本的镜像
+make image APP_NAME=my-app version=v1.0.0
+```
+
 ### 运行应用
 
 ```bash
 # 直接运行
 go run cmd/main.go
 
-# 或者使用 make (如果存在 Makefile)
+# 使用 Makefile 运行
 make run
+
+# 编译二进制文件
+make build
+
+# 构建 Docker 镜像
+make image
+
+# 运行测试
+make test
+
+# 生成 API 文档
+make docs
+
+# 代码检查
+make lint
 ```
 
 ## 架构说明
