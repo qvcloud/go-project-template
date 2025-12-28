@@ -43,3 +43,7 @@ docs: ## Generate swagger documentation
 .PHONY: lint
 lint: ## Run linter
 	golangci-lint run --fix
+
+.PHONY: test
+test: ## Run tests
+	go test -v ./... --count=1
