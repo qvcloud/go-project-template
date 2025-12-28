@@ -1,6 +1,6 @@
 module github.com/qvcloud/go-project-template
 
-go 1.23.8
+go 1.24
 
 require (
 	github.com/gin-gonic/gin v1.10.0

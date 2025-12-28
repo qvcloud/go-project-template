@@ -16,7 +16,7 @@ type Server struct {
 	viper  *viper.Viper
 	//middleware
 	//controllers
-	userHandler *user.UserHandler
+	userHandler *user.Handler
 }
 
 type injectContext struct {
@@ -24,7 +24,7 @@ type injectContext struct {
 	Logger      *zap.Logger
 	Viper       *viper.Viper
 	Engine      *gin.Engine
-	UserHandler *user.UserHandler
+	UserHandler *user.Handler
 }
 
 func NewHTTPServer(in injectContext) *Server {
@@ -45,5 +45,9 @@ func (w *Server) Run() {
 
 	w.viper.SetDefault("listen", "127.0.0.1")
 	w.viper.SetDefault("port", 8080)
-	go w.engine.Run(fmt.Sprintf("%s:%d", w.viper.GetString("listen"), w.viper.GetInt("port")))
+	go func() {
+		if err := w.engine.Run(fmt.Sprintf("%s:%d", w.viper.GetString("listen"), w.viper.GetInt("port"))); err != nil {
+			w.logger.Error("failed to start server", zap.Error(err))
+		}
+	}()
 }

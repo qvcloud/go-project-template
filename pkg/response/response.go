@@ -7,61 +7,55 @@ const (
 	CodeFailUnknown Code = 1 + iota
 )
 
-type Option func(opts *options)
+type Option func(opts *Response)
 
-type options struct {
+type Response struct {
 	Code    int64  `json:"code"`
 	Message string `json:"message,omitempty"`
 	Data    any    `json:"data,omitempty"`
 }
 
 func WithError(code int64, message string) Option {
-	return func(opts *options) {
+	return func(opts *Response) {
 		opts.Code = code
 		opts.Message = message
 	}
 }
 
 func WithData(data any) Option {
-	return func(opts *options) {
+	return func(opts *Response) {
 		opts.Data = data
 	}
 }
 
-func defaultSuccessOptions() *options {
-	return &options{
+func defaultSuccessOptions() *Response {
+	return &Response{
 		Code: int64(CodeSuccess),
 		Data: nil,
 	}
 }
 
-func defaultFailOptions() *options {
-	return &options{
+func defaultFailOptions() *Response {
+	return &Response{
 		Code:    int64(CodeFailUnknown),
 		Message: "unknown error",
 	}
 }
 
-func (o *options) apply(opts ...Option) {
-	for _, opt := range opts {
-		opt(o)
-	}
-}
-
-func Success() *options {
+func Success() *Response {
 	return defaultSuccessOptions()
 }
 
-func (o *options) WithData(data any) any {
+func (o *Response) WithData(data any) *Response {
 	o.Data = data
 	return o
 }
 
-func Fail() *options {
+func Fail() *Response {
 	return defaultFailOptions()
 }
 
-func (o *options) WithError(code int64, message string) any {
+func (o *Response) WithError(code int64, message string) *Response {
 	o.Code = code
 	o.Message = message
 	return o

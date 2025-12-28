@@ -7,16 +7,16 @@ import (
 )
 
 type UUID struct {
-	Id string `gorm:"primarykey;type:varchar(36)" json:"id"`
+	ID string `gorm:"primarykey;type:varchar(36)" json:"id"`
 }
 
 type ID struct {
-	Id int64 `gorm:"primarykey,autoIncrement" json:"id"`
+	ID int64 `gorm:"primarykey,autoIncrement" json:"id"`
 }
 
 func (u *UUID) GenerateID() {
-	if len(u.Id) == 0 {
-		u.Id = uuid.NewString()
+	if len(u.ID) == 0 {
+		u.ID = uuid.NewString()
 	}
 }
 

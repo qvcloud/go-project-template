@@ -16,6 +16,6 @@ func NewUserRepository(db *gorm.DB) repository.UserRepository {
 	}
 }
 
-func (u *user) Query(id int64) *entity.User {
+func (u *user) Query(_ int64) *entity.User {
 	return &entity.User{}
 }

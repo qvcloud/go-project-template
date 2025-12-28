@@ -1,0 +1,39 @@
+run:
+  timeout: 5m
+
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - revive
+    - govet
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - typecheck
+    - unused
+    - goconst
+    - gosec
+    - misspell
+    - prealloc
+    - errcheck
+
+
+linters-settings:
+  gosec:
+    excludes:
+      - G104 # 忽略 gosec 的未处理错误检查，使用更灵活的 errcheck 替代
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - fmt.Printf
+      - fmt.Println
+      - fmt.Print
+      - fmt.Fprintf
+      - fmt.Fprintln
+      - fmt.Fprint
+      - fmt.Sprintf
+      - strings.Builder.Write
+      - bytes.Buffer.Write

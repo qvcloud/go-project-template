@@ -13,19 +13,19 @@ var Module = fx.Module(
 	"http",
 	fx.Provide(
 		//注册各个模块的控制器
-		user.NewUserHandler,
+		user.NewHandler,
 		NewHTTPServer,
 	),
 	fx.Invoke(run),
 )
 
-func run(lc fx.Lifecycle, logger *zap.Logger, v *viper.Viper, s *Server) {
+func run(lc fx.Lifecycle, _ *zap.Logger, _ *viper.Viper, s *Server) {
 	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
+		OnStart: func(_ context.Context) error {
 			s.Run()
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
+		OnStop: func(_ context.Context) error {
 			return nil
 		},
 	})

@@ -1,37 +1,44 @@
 package provider
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"runtime"
 	"strings"
 
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
-func NewViper(logger *zap.Logger) *viper.Viper {
+func NewConfig(pathStr string) *viper.Viper {
 	var v = viper.NewWithOptions(
 		viper.EnvKeyReplacer(strings.NewReplacer(".", "_")),
 	)
 
+	v.SetEnvPrefix("APP")
 	v.AutomaticEnv()
-	// for unit test
-	if IsDevelopment() {
-		_, current, _, _ := runtime.Caller(0)
-		root := path.Dir(path.Dir(path.Dir(path.Dir(current))))
-		logger.Sugar().Infof("root: %s", root)
-		v.AddConfigPath(root)
+
+	if pathStr != "" {
+		v.SetConfigFile(pathStr)
+	} else {
+		// for unit test
+		if IsDevelopment() {
+			_, current, _, _ := runtime.Caller(0)
+			root := path.Dir(path.Dir(path.Dir(path.Dir(current))))
+			fmt.Printf("root: %s\n", root)
+			v.AddConfigPath(root)
+		}
+
+		v.AddConfigPath(".")
+		v.SetConfigName("config")
+		v.SetConfigType("yaml")
 	}
 
-	v.AddConfigPath(".")
-	v.SetConfigName("config")
-	v.SetConfigType("toml")
 	if err := v.ReadInConfig(); err != nil {
-		logger.Sugar().Warnf("not found config")
+		fmt.Printf("warn: not found config: %v\n", err)
 	}
 
-	logger.Sugar().Infof("config file: %s", v.ConfigFileUsed())
+	fmt.Printf("config file: %s\n", v.ConfigFileUsed())
 	return v
 }
 

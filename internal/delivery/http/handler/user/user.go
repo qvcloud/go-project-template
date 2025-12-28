@@ -2,23 +2,23 @@ package user
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/qvcloud/go-project-template/internal/usecase"
+	"github.com/qvcloud/go-project-template/internal/service"
 	"go.uber.org/zap"
 )
 
-type UserHandler struct {
+type Handler struct {
 	logger      *zap.Logger
-	userUseCase usecase.UserUseCase
+	userService service.UserService
 }
 
-func NewUserHandler(logger *zap.Logger, user usecase.UserUseCase) *UserHandler {
-	r := UserHandler{
+func NewHandler(logger *zap.Logger, user service.UserService) *Handler {
+	r := Handler{
 		logger:      logger,
-		userUseCase: user,
+		userService: user,
 	}
 	return &r
 }
 
-func (u *UserHandler) Query(c *gin.Context) {
+func (u *Handler) Query(_ *gin.Context) {
 
 }

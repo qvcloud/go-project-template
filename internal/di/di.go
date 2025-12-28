@@ -6,19 +6,20 @@ import (
 	"github.com/qvcloud/go-project-template/internal/delivery/http"
 	"github.com/qvcloud/go-project-template/internal/di/provider"
 	"github.com/qvcloud/go-project-template/internal/persistence"
-	"github.com/qvcloud/go-project-template/internal/usecase"
+	"github.com/qvcloud/go-project-template/internal/service"
+	"github.com/spf13/viper"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
-func App() *fx.App {
+func App(v *viper.Viper) *fx.App {
 	return fx.New(
+		fx.Supply(v),
 		fx.Provide(
 			zap.NewDevelopment,
-			provider.NewViper,
 			provider.NewRedis,
 			provider.NewGin,
-			usecase.NewUserUseCase,
+			service.NewUserService,
 		),
 		persistence.Module,
 		http.Module,

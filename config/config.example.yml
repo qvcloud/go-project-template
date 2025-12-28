@@ -1,0 +1,22 @@
+# Database Configuration
+database:
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "password"
+  name: "dev"
+  timezone: "Asia/Shanghai"
+  debug: false
+
+# Redis Configuration
+redis:
+  address: "localhost:6379"
+  db: 0
+  username: ""
+  password: ""
+  tls_enabled: false
+
+# Server Configuration
+listen:
+  listen: "127.0.0.1"
+  port: 8080

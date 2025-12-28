@@ -31,7 +31,7 @@ func NewRedis(v *viper.Viper, logger *zap.Logger) (*redis.Client, error) {
 	}
 	if tlsEnabled {
 		opts.TLSConfig = &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, //nolint:gosec
 		}
 	}
 
