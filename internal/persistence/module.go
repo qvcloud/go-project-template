@@ -1,16 +1,21 @@
-package database
+package persistence
 
 import (
 	"fmt"
 
-	"github.com/qvcloud/go-project-template/internal/persistence/database/entities"
+	"github.com/qvcloud/go-project-template/internal/di/provider"
+	"github.com/qvcloud/go-project-template/internal/domain/entity"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 var Module = fx.Module(
-	"database",
+	"persistence",
+	fx.Provide(
+		provider.NewGorm,
+		fx.Private,
+	),
 	fx.Provide(
 		NewUserRepository,
 		//注册其他的数据库实例
@@ -23,7 +28,7 @@ func autoMigrate(db *gorm.DB, logger *zap.Logger) error {
 	migrator := db.Migrator()
 
 	models := []interface{}{
-		&entities.User{},
+		&entity.User{},
 		//在这里添加其他的实体模型
 	}
 

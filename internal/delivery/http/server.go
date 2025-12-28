@@ -1,44 +1,44 @@
-package web
+package http
 
 import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/qvcloud/go-project-template/internal/services/web/controllers/user"
+	"github.com/qvcloud/go-project-template/internal/delivery/http/handler/user"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 )
 
-type WebServ struct {
+type Server struct {
 	engine *gin.Engine
 	logger *zap.Logger
 	viper  *viper.Viper
 	//middleware
 	//controllers
-	userController *user.UserController
+	userHandler *user.UserHandler
 }
 
 type injectContext struct {
 	fx.In
-	Logger         *zap.Logger
-	Viper          *viper.Viper
-	Engine         *gin.Engine
-	UserController *user.UserController
+	Logger      *zap.Logger
+	Viper       *viper.Viper
+	Engine      *gin.Engine
+	UserHandler *user.UserHandler
 }
 
-func NewWebServ(in injectContext) *WebServ {
-	r := &WebServ{
-		logger:         in.Logger,
-		viper:          in.Viper,
-		engine:         in.Engine,
-		userController: in.UserController,
+func NewHTTPServer(in injectContext) *Server {
+	r := &Server{
+		logger:      in.Logger,
+		viper:       in.Viper,
+		engine:      in.Engine,
+		userHandler: in.UserHandler,
 		//各种controller注入进来
 	}
 	return r
 }
 
-func (w *WebServ) Run() {
+func (w *Server) Run() {
 	w.logger.Sugar().Info("startup web server")
 
 	w.initRoutes()
