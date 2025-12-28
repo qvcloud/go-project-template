@@ -2,6 +2,8 @@
 help: ## Display this help screen
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+APP_NAME ?= go-project-template
+
 .PHONY: install
 install: ## Install dependencies
 	go install github.com/rubenv/sql-migrate/...@latest
@@ -26,7 +28,11 @@ run-debug: ## Run the application in debug mode
 
 .PHONY: build
 build: ## Build the application
-	@bash -x scripts/build.sh $(version)
+	@bash -x scripts/build.sh $(APP_NAME) $(version)
+
+.PHONY: image
+image: ## Build docker image
+	@bash scripts/build_image.sh $(APP_NAME) $(version)
 
 
 
