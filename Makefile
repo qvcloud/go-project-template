@@ -8,7 +8,7 @@ APP_NAME ?= go-project-template
 install: ## Install dependencies
 	go install github.com/rubenv/sql-migrate/...@latest
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install github.com/swaggo/swag/cmd/swag@v1.8.12
+	go install github.com/swaggo/swag/cmd/swag@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 	go install github.com/envoyproxy/protoc-gen-validate@latest
@@ -38,7 +38,7 @@ image: ## Build docker image
 
 .PHONY: docs
 docs: ## Generate swagger documentation
-	swag init -g cmd/main/main.go --parseDependency --parseInternal -o app/docs
+	swag init -g cmd/main.go --parseInternal -o generated/docs
 
 .PHONY: lint
 lint: ## Run linter

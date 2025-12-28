@@ -17,6 +17,26 @@ var (
 	appDesc = "A starter template for Go web services"
 )
 
+// @title Go Project Template API
+// @version 1.0
+// @description This is a sample server for a Go project template.
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8080
+// @BasePath /
+
+// @schemes http
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+
 func main() {
 	_ = godotenv.Load() //nolint:errcheck
 

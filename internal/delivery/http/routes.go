@@ -4,11 +4,23 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/qvcloud/go-project-template/generated/docs" // swagger docs
+	"github.com/qvcloud/gopkg/version"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/swaggo/swag"
 )
 
 func (s *Server) initRoutes() {
+	if version.Version != "" {
+		if doc := swag.GetSwagger("swagger"); doc != nil {
+			if spec, ok := doc.(*swag.Spec); ok {
+				spec.Version = version.Version
+			}
+		}
+
+	}
+
 	s.engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	s.engine.GET("/test", func(c *gin.Context) {
 		c.String(200, time.Now().String())
