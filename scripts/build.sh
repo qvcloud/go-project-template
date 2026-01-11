@@ -1,33 +1,48 @@
 #!/bin/bash
+set -e
 
-
-
-echo $(pwd)
-rm -rf ./dist/
-mkdir ./dist/
-
-APP_NAME=$1
-TAG=$2
-
-if [ "X${APP_NAME}" = "X" ];then
-    echo "app name cannot be empty"
-    exit 1
+# Load .env if exists
+if [ -f .env ]; then
+  # Use set -a to export variables automatically
+  set -a
+  source .env
+  set +a
 fi
 
-if [ "X${TAG}" = "X" ];then
-    echo "tag cannot be empty, example: ./build.sh appname v1.5.8"
-    exit 1
-fi
+# Default values. APP_NAME will read from env if set.
+APP_NAME=${1:-${APP_NAME:-"go-project-template"}}
+VERSION=${2:-$(git describe --tags --always --dirty 2>/dev/null || echo "dev")}
+OUTPUT_DIR="dist"
+MAIN_FILE="cmd/main.go"
 
+# Build Flags
+COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "none")
+BUILD_TIME=$(date +'%Y-%m-%d_%T')
+GO_VERSION=$(go env GOVERSION)
+VERSION_PKG="github.com/qvcloud/gopkg/version"
 
+LDFLAGS="-s -w"
+LDFLAGS+=" -X 'main.appName=${APP_NAME}'"
+LDFLAGS+=" -X '${VERSION_PKG}.Version=${VERSION}'"
+LDFLAGS+=" -X '${VERSION_PKG}.Commit=${COMMIT}'"
+LDFLAGS+=" -X '${VERSION_PKG}.Build=${BUILD_TIME}'"
+LDFLAGS+=" -X '${VERSION_PKG}.Go=${GO_VERSION}'"
 
-COMMIT=`git rev-parse HEAD`
-BUILDTIME=`date +'%Y-%m-%d_%T'`
-GOVER=`go env GOVERSION`
-UTILS="github.com/qvcloud/gopkg/version"
+# Environment Variables with defaults for Linux build (common for containers)
+# Allow overriding from outside
+export CGO_ENABLED=${CGO_ENABLED:-0}
+export GOOS=${GOOS:-linux}
+export GOARCH=${GOARCH:-amd64}
 
-FLAGS="-s -w -X ${UTILS}.Version=${TAG} -X ${UTILS}.Commit=${COMMIT} -X ${UTILS}.Build=${BUILDTIME} -X ${UTILS}.Go=${GOVER}"
+echo "Building ${APP_NAME}..."
+echo "  Version: ${VERSION}"
+echo "  Commit:  ${COMMIT}"
+echo "  OS/Arch: ${GOOS}/${GOARCH}"
+echo "  Output:  ${OUTPUT_DIR}/${APP_NAME}"
 
-echo ${FLAGS}
+rm -rf "${OUTPUT_DIR:?}/${APP_NAME}"
+mkdir -p "${OUTPUT_DIR}"
 
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="${FLAGS}" -o ./dist/${APP_NAME} cmd/main.go
+go build -ldflags "${LDFLAGS}" -o "${OUTPUT_DIR}/${APP_NAME}" "${MAIN_FILE}"
+
+echo "Build success!"

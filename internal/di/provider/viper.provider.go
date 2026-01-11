@@ -39,6 +39,11 @@ func NewViper(pathStr string) *viper.Viper {
 		fmt.Printf("warn: not found config: %v\n", err)
 	}
 
+	// Load APP_NAME from environment variable if set by .env
+	if appName := os.Getenv("APP_NAME"); appName != "" {
+		v.Set("app.name", appName)
+	}
+
 	fmt.Printf("config file: %s\n", v.ConfigFileUsed())
 	return v
 }

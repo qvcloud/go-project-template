@@ -40,6 +40,11 @@ var (
 func main() {
 	_ = godotenv.Load() //nolint:errcheck
 
+	// If APP_NAME is set in environment (or .env), override the default/build-time appName
+	if name := os.Getenv("APP_NAME"); name != "" {
+		appName = name
+	}
+
 	cmd := &cli.Command{
 		Name:        appName,
 		Description: appDesc,

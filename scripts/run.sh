@@ -1,3 +1,5 @@
 #!/bin/bash
+set -e
 
-go run cmd/main.go
+# Pass all arguments to the application
+go run cmd/main.go "$@"
