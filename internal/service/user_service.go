@@ -7,7 +7,7 @@ import (
 )
 
 type UserService interface {
-	GetUser(id int64) *entity.User
+	GetUser(id int64) (*entity.User, error)
 }
 
 type userService struct {
@@ -22,6 +22,6 @@ func NewUserService(repo repository.UserRepository, logger *zap.Logger) UserServ
 	}
 }
 
-func (u *userService) GetUser(id int64) *entity.User {
+func (u *userService) GetUser(id int64) (*entity.User, error) {
 	return u.repo.Query(id)
 }

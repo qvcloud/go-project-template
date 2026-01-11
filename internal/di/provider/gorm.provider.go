@@ -14,7 +14,7 @@ import (
 func NewGorm(cfg *Config) (*gorm.DB, error) {
 
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable TimeZone=%s",
-		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.Timezone)
+		cfg.Database.Host, cfg.Database.Port, cfg.Database.User, cfg.Database.Password, cfg.Database.Name, cfg.App.Timezone)
 
 	newLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
@@ -36,6 +36,21 @@ func NewGorm(cfg *Config) (*gorm.DB, error) {
 
 	if cfg.Database.Debug {
 		db = db.Debug()
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql db: %w", err)
+	}
+
+	if cfg.Database.MaxIdleConns > 0 {
+		sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+	}
+	if cfg.Database.MaxOpenConns > 0 {
+		sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+	}
+	if cfg.Database.ConnMaxLifetime > 0 {
+		sqlDB.SetConnMaxLifetime(time.Duration(cfg.Database.ConnMaxLifetime) * time.Second)
 	}
 
 	return db, nil

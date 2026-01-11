@@ -5,5 +5,5 @@ import (
 )
 
 type UserRepository interface {
-	Query(id int64) *entity.User
+	Query(id int64) (*entity.User, error)
 }

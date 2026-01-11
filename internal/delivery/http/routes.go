@@ -22,8 +22,11 @@ func (s *Server) initRoutes() {
 	}
 
 	s.engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	s.engine.GET("/test", func(c *gin.Context) {
-		c.String(200, time.Now().String())
+	s.engine.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status": "ok",
+			"time":   time.Now().Format(time.RFC3339),
+		})
 	})
 
 	apiV1 := s.engine.Group("/api/v1")

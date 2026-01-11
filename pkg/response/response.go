@@ -1,62 +1,42 @@
 package response
 
-type Code int64
+import (
+	"net/http"
 
-const (
-	CodeSuccess     Code = 0
-	CodeFailUnknown Code = 1 + iota
+	"github.com/gin-gonic/gin"
 )
 
-type Option func(opts *Response)
-
 type Response struct {
-	Code    int64  `json:"code"`
-	Message string `json:"message,omitempty"`
-	Data    any    `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data"`
 }
 
-func WithError(code int64, message string) Option {
-	return func(opts *Response) {
-		opts.Code = code
-		opts.Message = message
-	}
+const (
+	CodeSuccess     = 0
+	CodeFailUnknown = 1000
+)
+
+func Success(c *gin.Context, data any) {
+	c.JSON(http.StatusOK, Response{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data:    data,
+	})
 }
 
-func WithData(data any) Option {
-	return func(opts *Response) {
-		opts.Data = data
-	}
+func Fail(c *gin.Context, code int, message string) {
+	c.JSON(http.StatusOK, Response{
+		Code:    code,
+		Message: message,
+		Data:    nil,
+	})
 }
 
-func defaultSuccessOptions() *Response {
-	return &Response{
-		Code: int64(CodeSuccess),
-		Data: nil,
-	}
-}
-
-func defaultFailOptions() *Response {
-	return &Response{
-		Code:    int64(CodeFailUnknown),
-		Message: "unknown error",
-	}
-}
-
-func Success() *Response {
-	return defaultSuccessOptions()
-}
-
-func (o *Response) WithData(data any) *Response {
-	o.Data = data
-	return o
-}
-
-func Fail() *Response {
-	return defaultFailOptions()
-}
-
-func (o *Response) WithError(code int64, message string) *Response {
-	o.Code = code
-	o.Message = message
-	return o
+func FailWithError(c *gin.Context, err error) {
+	c.JSON(http.StatusOK, Response{
+		Code:    CodeFailUnknown,
+		Message: err.Error(),
+		Data:    nil,
+	})
 }

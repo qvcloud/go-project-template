@@ -2,6 +2,8 @@ package http
 
 import (
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/qvcloud/go-project-template/internal/delivery/http/handler/user"
@@ -43,8 +45,15 @@ func (w *Server) Run() {
 
 	w.initRoutes()
 
+	srv := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", w.cfg.HTTP.Address, w.cfg.HTTP.Port),
+		Handler:      w.engine,
+		ReadTimeout:  time.Duration(w.cfg.HTTP.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(w.cfg.HTTP.WriteTimeout) * time.Second,
+	}
+
 	go func() {
-		if err := w.engine.Run(fmt.Sprintf("%s:%d", w.cfg.HTTP.Address, w.cfg.HTTP.Port)); err != nil {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			w.logger.Error("failed to start server", zap.Error(err))
 		}
 	}()

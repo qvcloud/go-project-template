@@ -16,6 +16,8 @@ func NewUserRepository(db *gorm.DB) repository.UserRepository {
 	}
 }
 
-func (u *user) Query(_ int64) *entity.User {
-	return &entity.User{}
+func (u *user) Query(_ int64) (*entity.User, error) {
+	return &entity.User{
+		NickName: "mock_user",
+	}, nil
 }

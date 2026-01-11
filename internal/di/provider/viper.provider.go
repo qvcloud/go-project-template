@@ -30,6 +30,7 @@ func NewViper(pathStr string) *viper.Viper {
 		}
 
 		v.AddConfigPath(".")
+		v.AddConfigPath("./config")
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
 	}
