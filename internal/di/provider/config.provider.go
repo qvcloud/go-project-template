@@ -5,9 +5,9 @@ import "github.com/spf13/viper"
 type ENV string
 
 const (
-	ENV_DEVELOPMENT ENV = "development"
+	ENV_DEVELOPMENT ENV = "dev"
 	ENV_TEST        ENV = "test"
-	ENV_PRODUCTION  ENV = "production"
+	ENV_PRODUCTION  ENV = "prod"
 )
 
 type Config struct {
