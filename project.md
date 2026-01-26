@@ -13,6 +13,8 @@
 *   **日志系统**: [Zap](https://github.com/uber-go/zap) & [Lumberjack](https://github.com/natefinch/lumberjack) - 高性能结构化日志及文件切割。
 *   **消息中间件**: [RocketMQ](https://rocketmq.apache.org/) - 异步事件处理与解耦。
 *   **API 文档**: [Swagger (swag)](https://github.com/swaggo/swag) - 自动生成 API 接口文档。
+*   **数据库迁移**: [sql-migrate](https://github.com/rubenv/sql-migrate) - 功能强大的 SQL 迁移工具，支持单独的配置文件。
+*   **可观测性**: [Prometheus](https://prometheus.io/) (指标) & [OpenTelemetry](https://opentelemetry.io/) (追踪)。
 
 ## 2. 目录结构 (Directory Structure)
 
@@ -28,13 +30,16 @@
 │   │   ├── provider/   # 基础架构 Provider (DB, Redis, Log等)
 │   │   ├── root.go     # 公共依赖聚合
 │   │   └── http.go     # HTTP 服务的 FX 容器定义
+│   ├── migrations/     # SQL 迁移文件 (Schema 定义)
+│   ├── middleware/     # Gin 中间件 (JWT, 日志平滑, 限流)
 │   ├── model/          # 数据模型 (GORM 实体)
 │   ├── repository/     # 持久层 (数据库操作)
 │   ├── service/        # 业务逻辑层核心
-│   └── server/         # 接口定义 (HTTP 处理函数与路由)
+│   └── app/            # 应用入口 (HTTP Handler, MQ Consumer 等各协议实现)
 ├── pkg/                # 公共工具库 (可被外部引用)
-│   ├── response/       # 统一响应格式定义
+│   ├── response/       # 统一响应格式与错误码定义
 │   └── utils/          # 通用辅助函数
+├── scripts/            # 运维与开发脚本 (编译、镜像构建等)
 ├── generated/          # 自动生成代码 (Swagger, Mocks)
 ├── Makefile            # 编译与常用工具指令
 └── go.mod              # 依赖管理
@@ -64,10 +69,18 @@
 
 ### 3.5 声明式路由与中间件 (Router & Middleware)
 *   **Router**: `NewRouter` 负责将各 Handler 挂载到 Gin 路由组中。
-*   **Middleware**: 包含 JWT 校验、CORS、日志追踪等标准中间件。
+*   **Middleware**: 包含 JWT 校验、CORS、日志追踪、Recover 等标准中间件。
 
-### 3.6 生命周期 Hook (FX Lifecycle)
-框架利用 `fx.Hook` 在 `OnStart` 时启动 HTTP 服务监听，在 `OnStop` 时平滑关闭数据库连接与服务器。
+### 3.6 数据库迁移 (Migration)
+*   **工具**: 集成 `sql-migrate`。
+*   **职责**: 使用 `.sql` 文件定义迁移，支持 `up` 和 `down` 操作。配置文件通常为 `dbconfig.yml`。
+
+### 3.7 异步消息 (RocketMQ)
+*   **Provider**: `NewRocketMQProducer`
+*   **职责**: 初始化生产者，在 `OnStop` 时优雅关闭连接。
+
+### 3.8 生命周期 Hook (FX Lifecycle)
+框架利用 `fx.Hook` 在 `OnStart` 时启动 HTTP 服务监听，在 `OnStop` 时平滑关闭数据库连接、消息队列与服务器。
 
 ## 4. 典型开发流程 (Standard Workflow)
 
@@ -78,9 +91,9 @@
 3.  **业务层 (Service)**:
     - 在 `internal/service/` 下编写业务逻辑，并注入 Repository。
 4.  **控制层 (Handler)**:
-    - 在 `internal/server/http/handler/` 下编写处理函数，并注入 Service。
-    - 在 `internal/server/http/module.go` 中注册 Provider。
-5.  **路由注册**: 在 `internal/server/http/routes.go` 中通过 `Router.Register()` 将路由注册到 `gin.Engine`。
+    - 在 `internal/app/http/handler/` 下编写处理函数，并注入 Service。
+    - 在 `internal/app/http/module.go` 中注册 Provider。
+5.  **路由注册**: 在 `internal/app/http/routes.go` 中通过 `Router.Register()` 将路由注册到 `gin.Engine`。
 
 ## 5. 项目启动与命令行 (CLI Entrypoints)
 
@@ -133,6 +146,11 @@ type Config struct {
     HTTP     HTTPConfig     `mapstructure:"http"`
     Database DatabaseConfig `mapstructure:"database"`
     Redis    RedisConfig    `mapstructure:"redis"`
+    RocketMQ RocketMQConfig `mapstructure:"rocketmq"`
+}
+
+type RocketMQConfig struct {
+    Endpoint string `mapstructure:"endpoint"`
 }
 
 type LogConfig struct {
@@ -281,7 +299,7 @@ func HTTPModule(_ *cobra.Command, _ []string) *fx.App {
         common,
         repository.Module,
         service.Module,
-        http.Module,
+        app_http.Module, // 对应 internal/app/http
         fx.Invoke(func(lc fx.Lifecycle, logger *zap.Logger) {
             lc.Append(fx.Hook{
                 OnStart: func(_ context.Context) error {
@@ -301,7 +319,7 @@ func HTTPModule(_ *cobra.Command, _ []string) *fx.App {
 ### 6.4 HTTP 服务生命周期管理
 
 ```go
-// internal/server/http/module.go (部分)
+// internal/app/http/module.go (部分)
 func setupHTTP(lc fx.Lifecycle, in inFx) {
     server := &http.Server{
         Addr:         fmt.Sprintf(":%d", in.Cfg.HTTP.Port),
@@ -324,10 +342,136 @@ func setupHTTP(lc fx.Lifecycle, in inFx) {
 }
 ```
 
-### 6.5 统一响应处理 (Unified Response)
+### 6.5 消息队列 - RocketMQ Producer
+
+```go
+// internal/di/provider/rocketmq.provider.go
+func NewRocketMQProducer(cfg *Config, lc fx.Lifecycle) (primitive.Producer, error) {
+    p, err := rocketmq.NewProducer(
+        producer.WithNsResolver(primitive.NewFixedNamesrvResolver([]string{cfg.RocketMQ.Endpoint})),
+        producer.WithRetry(2),
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    lc.Append(fx.Hook{
+        OnStart: func(ctx context.Context) error {
+            return p.Start()
+        },
+        OnStop: func(ctx context.Context) error {
+            return p.Shutdown()
+        },
+    })
+
+    return p, nil
+}
+```
+
+### 6.6 业务中间件 - JWT 校验与 TraceID
+
+```go
+// internal/middleware/trace.go
+func TraceID() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        traceID := c.GetHeader("X-Trace-ID")
+        if traceID == "" {
+            // 自行实现随机字符串生成
+            traceID = "req-" + time.Now().Format("20060102150405")
+        }
+        c.Set("traceId", traceID)
+        c.Header("X-Trace-ID", traceID)
+        c.Next()
+    }
+}
+
+// internal/middleware/auth.go
+func JWTAuth(cfg *Config) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        token := c.GetHeader("Authorization")
+        if token == "" {
+            response.Fail(c, response.CodeUnauthorized, "missing token")
+            c.Abort()
+            return
+        }
+        // ... JWT 解析后可将用户信息存入 Context ...
+        c.Next()
+    }
+}
+```
+
+### 6.7 请求校验与 Swagger 示例
+
+```go
+// internal/app/http/handler/user.go
+type LoginReq struct {
+    Username string `json:"username" binding:"required,min=4"`
+    Password string `json:"password" binding:"required"`
+}
+
+// LoginHandler 处理登录请求
+// @Summary 用户登录
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param body body LoginReq true "登录参数"
+// @Success 200 {object} response.Response
+// @Router /api/v1/login [post]
+func LoginHandler(cfg *Config, userService *service.UserService) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        var req LoginReq
+        if err := c.ShouldBindJSON(&req); err != nil {
+            response.Fail(c, response.CodeInvalidParam, err.Error())
+            return
+        }
+        // ... 调用 service 逻辑 ...
+        response.Success(c, nil)
+    }
+}
+```
+
+### 6.8 消费者应用入口 (MQ Consumer)
+
+对于非 HTTP 类型的入口（消息消费者），可以使用独立的 DI 模块启动。
+
+```go
+// internal/di/consumer.go
+func ConsumerModule(_ *cobra.Command, _ []string) *fx.App {
+    return fx.New(
+        common,
+        repository.Module,
+        service.Module,
+        fx.Invoke(func(lc fx.Lifecycle, p primitive.Producer, logger *zap.Logger) {
+            lc.Append(fx.Hook{
+                OnStart: func(_ context.Context) error {
+                    logger.Info("MQ Consumer started")
+                    // 在此处启动消费组订阅逻辑
+                    return nil
+                },
+                OnStop: func(_ context.Context) error {
+                    logger.Info("MQ Consumer stopped")
+                    return nil
+                },
+            })
+        }),
+    )
+}
+```
+
+### 6.9 统一响应处理 (Unified Response)
 在 `pkg/response/` 中定义标准响应格式，确保前端处理逻辑一致。
 
 ```go
+// pkg/response/code.go
+type Code int
+
+const (
+    CodeSuccess      Code = 0
+    CodeInvalidParam Code = 400
+    CodeUnauthorized Code = 401
+    CodeInternalErr  Code = 500
+)
+
 // pkg/response/response.go
 type Response struct {
     Code    Code        `json:"code"`
@@ -336,7 +480,7 @@ type Response struct {
 }
 
 func Success(c *gin.Context, data interface{}) {
-    c.JSON(http.StatusOK, Response{Code: 0, Message: "success", Data: data})
+    c.JSON(http.StatusOK, Response{Code: CodeSuccess, Message: "success", Data: data})
 }
 
 func Fail(c *gin.Context, code Code, message string) {
@@ -388,6 +532,7 @@ install: ## 1. 核心初始化指令：安装项目依赖及所有 CLI 工具
 	go install github.com/swaggo/swag/cmd/swag@latest
 	go install go.uber.org/mock/mockgen@latest
 	go install github.com/spf13/cobra-cli@latest
+	go install github.com/rubenv/sql-migrate/...@latest
 
 build: ## 编译应用 eg: make build version=v1.0.0
 	@bash scripts/build.sh $(version)
@@ -397,6 +542,9 @@ run-http: ## 运行 HTTP 服务
 
 docs: ## 生成/更新 API 文档 (输出至 generated/docs/)
 	swag init -g internal/di/http.go --parseDependency --parseInternal -o ./generated/docs
+
+migrate-up: ## 运行数据库向上迁移
+	sql-migrate up -config=config/dbconfig.yml -env="development"
 
 mock: ## 扫描接口定义并刷新 generated/mocks/
 	@bash scripts/mockgen.sh
@@ -555,10 +703,26 @@ redis:
   url: "redis://localhost:6379/0"
 ```
 
+### 9.5 迁移配置 (`config/dbconfig.yml`)
+
+用于 `sql-migrate` 工具的数据库连接配置。
+
+```yaml
+development:
+  dialect: postgres
+  datasource: host=localhost port=5432 user=postgres password=postgres dbname=<project_db> sslmode=disable
+  dir: internal/migrations
+  table: migrations
+```
+
 ## 10. 快速复用建议 (Scaffolding Tips)
 
-1.  **基础设施复用**: 直接复制 `internal/di/provider/` 下的所有文件，它们封装了绝大多数项目的通用依赖（DB, Redis, Log）。
-2.  **DI 骨架**: 复制 `internal/di/root.go` 和 `internal/di/http.go`，以此为基础扩展新命令。
-3.  **全局配置**: 修改 `internal/di/provider/config.provider.go` 中的 `Config` 结构体以匹配新业务属性。
-4.  **依赖注入模式**: 始终坚持 `Module` -> `Provide` -> `Invoke` (setup) 的 fx 范式。
-5.  **统一响应**: 复制 `pkg/response/` 以保持全项目 API 格式的一致性。
+1.  **一键初始化**: 建议在新项目目录运行以下命令进行重命名：
+    ```bash
+    find . -type f -not -path '*/.*' -exec sed -i '' 's/go-project-template/<your-project-name>/g' {} +
+    ```
+2.  **基础设施复用**: 直接复制 `internal/di/provider/` 下的所有文件，它们封装了绝大多数项目的通用依赖（DB, Redis, Log, RocketMQ）。
+3.  **DI 骨架**: 复制 `internal/di/root.go` 和 `internal/di/http.go`，以此为基础扩展新命令。
+4.  **全局配置**: 修改 `internal/di/provider/config.provider.go` 中的 `Config` 结构体以匹配新业务属性。
+5.  **中间件注册**: 在 `internal/app/http/module.go` 的 `NewGin` 中根据需求通过 `r.Use()` 注册中间件。
+6.  **统一响应**: 复制 `pkg/response/` 以保持全项目 API 格式的一致性。
