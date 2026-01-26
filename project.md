@@ -88,9 +88,9 @@
 
 *   **启动服务**: `go run main.go http`
 
-## 7. 核心骨架实现参考 (Core Implementation Reference)
+## 6. 核心骨架实现参考 (Core Implementation Reference)
 
-### 7.1 应用入口 (Root & CLI)
+### 6.1 应用入口 (Root & CLI)
 
 ```go
 // cmd/root.go
@@ -109,7 +109,7 @@ func initViper() {
 }
 ```
 
-### 7.2 依赖注入 - 基础 Provider (DI Providers)
+### 6.2 依赖注入 - 基础 Provider (DI Providers)
 
 #### Viper & Config
 ```go
@@ -119,9 +119,64 @@ func NewViper() *viper.Viper {
 }
 
 // internal/di/provider/config.provider.go
+type Env string
+
+const (
+    EnvDev  Env = "dev"
+    EnvTest Env = "test"
+    EnvProd Env = "prod"
+)
+
+type Config struct {
+    Env      Env            `mapstructure:"env"`
+    Log      LogConfig      `mapstructure:"log"`
+    HTTP     HTTPConfig     `mapstructure:"http"`
+    Database DatabaseConfig `mapstructure:"database"`
+    Redis    RedisConfig    `mapstructure:"redis"`
+}
+
+type LogConfig struct {
+    Level      string `mapstructure:"level"`
+    Format     string `mapstructure:"format"`
+    Output     string `mapstructure:"output"`
+    File       string `mapstructure:"file"`
+    MaxSize    int    `mapstructure:"max_size"`
+    MaxBackups int    `mapstructure:"max_backups"`
+    MaxAge     int    `mapstructure:"max_age"`
+    Compress   bool   `mapstructure:"compress"`
+}
+
+type HTTPConfig struct {
+    Host         string `mapstructure:"host"`
+    Port         int    `mapstructure:"port"`
+    ReadTimeout  int    `mapstructure:"read_timeout"`
+    WriteTimeout int    `mapstructure:"write_timeout"`
+    Mode         string `mapstructure:"mode"`
+    JWTSecret    string `mapstructure:"jwt_secret"`
+}
+
+type RedisConfig struct {
+    URL      string `mapstructure:"url"`
+    PoolSize int    `mapstructure:"pool_size"`
+    TLS      string `mapstructure:"tls"`
+}
+
+type DatabaseConfig struct {
+    Driver          string `mapstructure:"driver"` // 固定使用 postgres
+    Host            string `mapstructure:"host"`
+    Port            int    `mapstructure:"port"`
+    Username        string `mapstructure:"username"`
+    Password        string `mapstructure:"password"`
+    Database        string `mapstructure:"database"`
+    MaxOpenConns    int    `mapstructure:"max_open_conns"`
+    MaxIdleConns    int    `mapstructure:"max_idle_conns"`
+    ConnMaxLifetime int    `mapstructure:"conn_max_lifetime"`
+    Debug           bool   `mapstructure:"debug"`
+    TLS             string `mapstructure:"tls"` // 用于 sslmode
+}
+
 func NewConfig(v *viper.Viper) (*Config, error) {
     var config Config
-    setDefaults(v)
     if err := v.Unmarshal(&config); err != nil {
         return nil, err
     }
@@ -162,20 +217,32 @@ func NewZapLogger(config *Config) (*zap.Logger, error) {
 }
 ```
 
-#### GORM (数据库)
+#### GORM (数据库 - Postgres)
 ```go
 // internal/di/provider/gorm.provider.go
 func NewGorm(cfg *Config, logger *zap.Logger) (*gorm.DB, error) {
-    dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-        cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, 
-        cfg.Database.Port, cfg.Database.Database)
-    db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-    if err != nil {
-        return nil, err
+    sslMode := "disable"
+    if cfg.Database.TLS != "" {
+        sslMode = cfg.Database.TLS
     }
+    // 构造 Postgres DSN
+    dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Shanghai",
+        cfg.Database.Host, cfg.Database.Port, cfg.Database.Username, 
+        cfg.Database.Password, cfg.Database.Database, sslMode)
+        
+    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect database: %w", err)
+    }
+    
     sqlDB, _ := db.DB()
     sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
     sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+    sqlDB.SetConnMaxLifetime(time.Duration(cfg.Database.ConnMaxLifetime) * time.Second)
+    
+    if cfg.Database.Debug {
+        db = db.Debug()
+    }
     return db, nil
 }
 ```
@@ -191,7 +258,7 @@ func NewGin(cfg *Config) *gin.Engine {
 }
 ```
 
-### 7.3 依赖注入 - 模块聚合 (DI Modules)
+### 6.3 依赖注入 - 模块聚合 (DI Modules)
 
 #### 公共依赖聚合
 ```go
@@ -231,7 +298,7 @@ func HTTPModule(_ *cobra.Command, _ []string) *fx.App {
 }
 ```
 
-### 7.4 HTTP 服务生命周期管理
+### 6.4 HTTP 服务生命周期管理
 
 ```go
 // internal/server/http/module.go (部分)
@@ -257,7 +324,7 @@ func setupHTTP(lc fx.Lifecycle, in inFx) {
 }
 ```
 
-### 7.5 统一响应处理 (Unified Response)
+### 6.5 统一响应处理 (Unified Response)
 在 `pkg/response/` 中定义标准响应格式，确保前端处理逻辑一致。
 
 ```go
@@ -277,7 +344,218 @@ func Fail(c *gin.Context, code Code, message string) {
 }
 ```
 
-## 8. 快速复用建议 (Scaffolding Tips)
+## 7. 测试与 Mock 工具 (Mocking & Testing)
+
+项目使用 `go.uber.org/mock` 进行单元测试的 Mock 代码生成，方便在测试 Service 时排除 Repository 或外部 Client 的干扰。
+
+### 7.1 Mock 代码生成
+生成的代码统一存放在 `generated/mocks/` 目录下。
+
+*   **生成命令**: `make mock` 或直接运行 `bash scripts/mockgen.sh`。
+*   **脚本逻辑**: 内部使用 `mockgen` 根据 `internal/repository` 或其他包中的接口定义自动生成 Mock 实现。
+
+```bash
+# scripts/mockgen.sh 示例
+mockgen -destination=./generated/mocks/user_repository.go -package=mocks <project_module>/internal/repository UserRepository
+```
+
+### 7.2 使用示例
+在编写测试时，可以通过 `mocks.NewMockUserRepository(ctrl)` 快速创建一个模拟对象，并预设其返回值。
+
+## 8. 常用脚本工具 (Scripts & Makefile)
+
+项目在 `scripts/` 目录下封装了常用的开发与部署任务，并通过 `Makefile` 提供了统一的命令行入口。
+
+### 8.1 核心脚本说明
+*   **`scripts/build.sh`**: 编译脚本。会自动注入版本号、构建时间、Git Commit ID 等元数据到二进制文件中。
+*   **`scripts/mockgen.sh`**: 自动化 Mock 生成脚本。
+*   **`scripts/build_image.sh`**: Docker 镜像构建脚本。
+
+### 8.2 Makefile 完整命令参考 (Makefile Reference)
+
+为了方便快速搭建环境和执行常用任务，以下是推荐的 `Makefile` 内容，集成了所有必要的工具安装与开发指令：
+
+```makefile
+.PHONY: help build run-http clean test docs mock install fmt lint
+
+help: ## 显示帮助信息
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+install: ## 1. 核心初始化指令：安装项目依赖及所有 CLI 工具
+	go mod tidy
+	go mod download
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/swaggo/swag/cmd/swag@latest
+	go install go.uber.org/mock/mockgen@latest
+	go install github.com/spf13/cobra-cli@latest
+
+build: ## 编译应用 eg: make build version=v1.0.0
+	@bash scripts/build.sh $(version)
+
+run-http: ## 运行 HTTP 服务
+	go run main.go http
+
+docs: ## 生成/更新 API 文档 (输出至 generated/docs/)
+	swag init -g internal/di/http.go --parseDependency --parseInternal -o ./generated/docs
+
+mock: ## 扫描接口定义并刷新 generated/mocks/
+	@bash scripts/mockgen.sh
+
+test: ## 运行全项目单元测试 (禁用缓存)
+	go test ./... --count=1
+
+fmt: ## 自动代码格式化
+	go fmt ./...
+
+lint: ## 严格的高性能静态分析
+	golangci-lint run
+
+clean: ## 清理编译产物和 Go 缓存
+	rm -rf dist/
+	go clean
+```
+
+## 9. 核心工具配置文件 (Core Configuration Templates)
+
+以下是项目核心工具的脱敏配置文件，可直接复制到新项目根目录下使用。
+
+### 9.1 代码检查 (`.golangci.yml`)
+
+用于强制执行团队代码规范，集成 `revive`, `gosec`, `staticcheck` 等高性能插件。
+
+```yaml
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - revive
+    - govet
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - typecheck
+    - unused
+    - goconst
+    - gosec
+    - misspell
+    - prealloc
+    - errcheck
+
+linters-settings:
+  gosec:
+    excludes:
+      - G104 # 忽略未处理错误检查，由 errcheck 处理
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - fmt.Printf
+      - fmt.Println
+      - github.com/spf13/viper.BindPFlag
+      - github.com/joho/godotenv.Load
+```
+
+### 9.2 容器化 (`Dockerfile`)
+
+基于 Alpine 的多阶段构建，极致优化镜像体积。
+
+```dockerfile
+# 阶段1: 构建
+FROM golang:1.24-alpine AS build
+WORKDIR /app
+COPY . /app
+RUN go mod download
+
+ARG VERSION
+RUN apk add --no-cache make bash git
+RUN make build version=${VERSION}
+
+# 阶段2: 运行
+FROM alpine:latest
+RUN apk add --no-cache tzdata
+WORKDIR /app
+COPY --from=build /app/dist/<project_bin> /app/<project_bin>
+COPY --from=build /app/config/ /app/config/
+RUN chmod +x /app/<project_bin>
+
+EXPOSE 8080
+CMD ["./<project_bin>", "http"]
+```
+
+### 9.3 基础设施 (`docker-compose.yml`)
+
+快速启动本地开发依赖环境（Postgres, Redis, RocketMQ）。
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine 
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRES_DB=<project_db>
+      - POSTGRES_PASSWORD=postgres
+
+  redis:
+    image: redis:latest
+    ports:
+      - '6379:6379'
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.4
+    ports:
+      - 9876:9876
+    command: sh mqnamesrv
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.4
+    environment:
+      - NAMESRV_ADDR=rocketmq-namesrv:9876
+    depends_on:
+      - rocketmq-namesrv
+    ports:
+      - 10911:10911
+    command: sh mqbroker
+```
+
+### 9.4 业务配置 (`config/config.example.yaml`)
+
+包含日志、HTTP、数据库、Redis 等标准配置模板。
+
+```yaml
+env: dev
+log:
+  level: info
+  format: json
+  output: console # stdout, file, console
+  file: logs/app.log
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  mode: debug
+
+database:
+  driver: postgres # 固定使用 postgres
+  host: localhost
+  port: 5432
+  username: postgres
+  password: postgres
+  database: <project_db>
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 3600
+  tls: "disable" # disable, require, verify-ca, verify-full
+  debug: false
+
+redis:
+  url: "redis://localhost:6379/0"
+```
+
+## 10. 快速复用建议 (Scaffolding Tips)
 
 1.  **基础设施复用**: 直接复制 `internal/di/provider/` 下的所有文件，它们封装了绝大多数项目的通用依赖（DB, Redis, Log）。
 2.  **DI 骨架**: 复制 `internal/di/root.go` 和 `internal/di/http.go`，以此为基础扩展新命令。
