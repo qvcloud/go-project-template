@@ -20,12 +20,9 @@
 .
 ├── cmd/                # 应用入口 (Cobra 命令定义)
 │   ├── root.go         # 根命令与全局配置初始化
-│   ├── http.go         # API 服务启动命令
-│   ├── scanner.go      # 区块链解析服务启动命令
-│   └── migrate.go      # 数据库迁移工具
+│   └── http.go         # HTTP 服务启动命令
 ├── config/             # 配置文件与静态资源
-│   ├── config.yaml     # 运行时配置
-│   └── abi/            # 智能合约 ABI JSON 文件
+│   └── config.yaml     # 运行时配置
 ├── internal/           # 业务逻辑 (外部不可调用)
 │   ├── di/             # 依赖注入中心
 │   │   ├── provider/   # 基础架构 Provider (DB, Redis, Log等)
@@ -34,13 +31,10 @@
 │   ├── model/          # 数据模型 (GORM 实体)
 │   ├── repository/     # 持久层 (数据库操作)
 │   ├── service/        # 业务逻辑层核心
-│   ├── server/         # 接口定义 (HTTP, WebSocket 等)
-│   └── migrations/     # 数据库迁移脚本
+│   └── server/         # 接口定义 (HTTP 处理函数与路由)
 ├── pkg/                # 公共工具库 (可被外部引用)
-│   ├── abi_helper/     # 合约解析工具
 │   ├── response/       # 统一响应格式定义
-│   ├── utils/          # 通用辅助函数
-│   └── broker-rocketmq/# 消息队列封装
+│   └── utils/          # 通用辅助函数
 ├── generated/          # 自动生成代码 (Swagger, Mocks)
 ├── Makefile            # 编译与常用工具指令
 └── go.mod              # 依赖管理
@@ -58,7 +52,6 @@
 *   **Provider**: `NewGorm`
 *   **职责**:
     - 初始化数据库连接池。
-    - 自动检测并执行数据库迁移 (`migrations.Run`)。
     - 配置日志模式与连接限制。
 
 ### 3.3 日志 (Zap)
@@ -69,41 +62,222 @@
 *   **Provider**: `NewGin`
 *   **职责**: 初始化 Gin 引擎，设置中间件（CORS, Recover, Logger）。
 
-### 3.5 消息队列 (Broker/RocketMQ)
-*   **Provider**: `NewBroker`
-*   **职责**: 基于 `RocketMQ` 的生产者与消费者封装，用于跨服务或模块间的异步通信。
-
-### 3.6 声明式路由与中间件 (Router & Middleware)
+### 3.5 声明式路由与中间件 (Router & Middleware)
 *   **Router**: `NewRouter` 负责将各 Handler 挂载到 Gin 路由组中。
 *   **Middleware**: 包含 JWT 校验、CORS、日志追踪等标准中间件。
 
-### 3.7 生命周期 Hook (FX Lifecycle)
-框架利用 `fx.Hook` 在 `OnStart` 时启动服务（如 `http.ListenAndServe`、消息订阅、任务处理器等），在 `OnStop` 时平滑关闭连接（如 DB Close、Redis Close）。
+### 3.6 生命周期 Hook (FX Lifecycle)
+框架利用 `fx.Hook` 在 `OnStart` 时启动 HTTP 服务监听，在 `OnStop` 时平滑关闭数据库连接与服务器。
 
 ## 4. 典型开发流程 (Standard Workflow)
 
 1.  **定义模型**: 在 `internal/model/` 下创建新表结构。
-2.  **创建迁移**: 在 `internal/migrations/` 下添加迁移 SQL 或逻辑。
-3.  **持久层 (Repository)**:
+2.  **持久层 (Repository)**:
     - 在 `internal/repository/` 下定义接口并实现。
     - 在 `internal/repository/module.go` 中通过 `fx.Provide` 注册。
-4.  **业务层 (Service)**:
+3.  **业务层 (Service)**:
     - 在 `internal/service/` 下编写业务逻辑，并注入 Repository。
-    - 按功能拆分 Module（如 `event.Module`, `http.Module`）。
-5.  **控制层 (Handler)**:
+4.  **控制层 (Handler)**:
     - 在 `internal/server/http/handler/` 下编写处理函数，并注入 Service。
     - 在 `internal/server/http/module.go` 中注册 Provider。
-6.  **路由注册**: 在 `internal/server/http/routes.go` 中通过 `Router.Register()` 将路由注册到 `gin.Engine`。
+5.  **路由注册**: 在 `internal/server/http/routes.go` 中通过 `Router.Register()` 将路由注册到 `gin.Engine`。
 
 ## 5. 项目启动与命令行 (CLI Entrypoints)
 
-通过 `Cobra` 提供的入口，项目可以以不同的模式运行：
+通过 `Cobra` 提供的入口启动 HTTP 服务：
 
-*   **API 服务**: `go run main.go http`
-*   **扫链服务**: `go run main.go scanner`
-*   **数据库迁移**: `go run main.go migrate`
+*   **启动服务**: `go run main.go http`
 
-## 6. 快速复用建议 (Scaffolding Tips)
+## 7. 核心骨架实现参考 (Core Implementation Reference)
+
+### 7.1 应用入口 (Root & CLI)
+
+```go
+// cmd/root.go
+func initViper() {
+    godotenv.Load()
+    if cfgFile != "" {
+        viper.SetConfigFile(cfgFile)
+    } else {
+        viper.AddConfigPath("./config")
+        viper.SetConfigName("config")
+        viper.SetConfigType("yaml")
+    }
+    viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+    viper.AutomaticEnv()
+    viper.ReadInConfig()
+}
+```
+
+### 7.2 依赖注入 - 基础 Provider (DI Providers)
+
+#### Viper & Config
+```go
+// internal/di/provider/viper.provider.go
+func NewViper() *viper.Viper {
+    return viper.GetViper()
+}
+
+// internal/di/provider/config.provider.go
+func NewConfig(v *viper.Viper) (*Config, error) {
+    var config Config
+    setDefaults(v)
+    if err := v.Unmarshal(&config); err != nil {
+        return nil, err
+    }
+    return &config, nil
+}
+```
+
+#### Zap Logger (日志)
+```go
+// internal/di/provider/zap.provider.go
+func NewZapLogger(config *Config) (*zap.Logger, error) {
+    cfg := zap.NewProductionConfig()
+    cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+    if level, err := zapcore.ParseLevel(config.Log.Level); err == nil {
+        cfg.Level = zap.NewAtomicLevelAt(level)
+    }
+    var core zapcore.Core
+    var encoder zapcore.Encoder
+    if config.Log.Format == "text" {
+        cfg.Encoding = "console"
+        cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+        encoder = zapcore.NewConsoleEncoder(cfg.EncoderConfig)
+    } else {
+        encoder = zapcore.NewJSONEncoder(cfg.EncoderConfig)
+    }
+    if config.Log.Output == "file" && config.Log.File != "" {
+        os.MkdirAll(filepath.Dir(config.Log.File), 0755)
+        w := zapcore.AddSync(&lumberjack.Logger{
+            Filename: config.Log.File, MaxSize: config.Log.MaxSize,
+            MaxBackups: config.Log.MaxBackups, MaxAge: config.Log.MaxAge,
+            Compress: config.Log.Compress,
+        })
+        core = zapcore.NewCore(encoder, w, cfg.Level)
+    } else {
+        core = zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), cfg.Level)
+    }
+    return zap.New(core, zap.AddCaller()), nil
+}
+```
+
+#### GORM (数据库)
+```go
+// internal/di/provider/gorm.provider.go
+func NewGorm(cfg *Config, logger *zap.Logger) (*gorm.DB, error) {
+    dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+        cfg.Database.Username, cfg.Database.Password, cfg.Database.Host, 
+        cfg.Database.Port, cfg.Database.Database)
+    db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+    if err != nil {
+        return nil, err
+    }
+    sqlDB, _ := db.DB()
+    sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
+    sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
+    return db, nil
+}
+```
+
+#### Gin (Web 引擎)
+```go
+// internal/di/provider/gin.provider.go
+func NewGin(cfg *Config) *gin.Engine {
+    if strings.ToLower(cfg.HTTP.Mode) == "release" {
+        gin.SetMode(gin.ReleaseMode)
+    }
+    return gin.New()
+}
+```
+
+### 7.3 依赖注入 - 模块聚合 (DI Modules)
+
+#### 公共依赖聚合
+```go
+// internal/di/root.go
+var common = fx.Option(
+    fx.Provide(
+        provider.NewViper,
+        provider.NewConfig,
+        provider.NewZapLogger,
+        provider.NewGorm,
+    ),
+)
+```
+
+#### HTTP 子应用入口
+```go
+// internal/di/http.go
+func HTTPModule(_ *cobra.Command, _ []string) *fx.App {
+    return fx.New(
+        common,
+        repository.Module,
+        service.Module,
+        http.Module,
+        fx.Invoke(func(lc fx.Lifecycle, logger *zap.Logger) {
+            lc.Append(fx.Hook{
+                OnStart: func(_ context.Context) error {
+                    logger.Info("HTTP Service started")
+                    return nil
+                },
+                OnStop: func(_ context.Context) error {
+                    logger.Info("HTTP Service stopped")
+                    return nil
+                },
+            })
+        }),
+    )
+}
+```
+
+### 7.4 HTTP 服务生命周期管理
+
+```go
+// internal/server/http/module.go (部分)
+func setupHTTP(lc fx.Lifecycle, in inFx) {
+    server := &http.Server{
+        Addr:         fmt.Sprintf(":%d", in.Cfg.HTTP.Port),
+        Handler:      in.Engine,
+        ReadTimeout:  time.Duration(in.Cfg.HTTP.ReadTimeout) * time.Second,
+        WriteTimeout: time.Duration(in.Cfg.HTTP.WriteTimeout) * time.Second,
+    }
+    lc.Append(fx.Hook{
+        OnStart: func(_ context.Context) error {
+            go func() {
+                in.Router.Register() // 注册路由
+                server.ListenAndServe()
+            }()
+            return nil
+        },
+        OnStop: func(ctx context.Context) error {
+            return server.Shutdown(ctx)
+        },
+    })
+}
+```
+
+### 7.5 统一响应处理 (Unified Response)
+在 `pkg/response/` 中定义标准响应格式，确保前端处理逻辑一致。
+
+```go
+// pkg/response/response.go
+type Response struct {
+    Code    Code        `json:"code"`
+    Message string      `json:"message"`
+    Data    interface{} `json:"data,omitempty"`
+}
+
+func Success(c *gin.Context, data interface{}) {
+    c.JSON(http.StatusOK, Response{Code: 0, Message: "success", Data: data})
+}
+
+func Fail(c *gin.Context, code Code, message string) {
+    c.JSON(http.StatusOK, Response{Code: code, Message: message})
+}
+```
+
+## 8. 快速复用建议 (Scaffolding Tips)
 
 1.  **基础设施复用**: 直接复制 `internal/di/provider/` 下的所有文件，它们封装了绝大多数项目的通用依赖（DB, Redis, Log）。
 2.  **DI 骨架**: 复制 `internal/di/root.go` 和 `internal/di/http.go`，以此为基础扩展新命令。
